@@ -1,143 +1,217 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Mini Kart Racer Battles</title>
+  <title>Ultimate 3D Kart Racer</title>
   <style>
-    body {
-      margin: 0;
-      background: #1a1a1a;
-      color: white;
-      text-align: center;
-      font-family: Arial;
-    }
-    canvas {
-      display: block;
-      margin: auto;
-      background: #444;
-      border: 3px solid white;
-    }
+    body { margin:0; background:black; overflow:hidden; }
+    canvas { display:block; margin:auto; background:skyblue; }
   </style>
 </head>
 <body>
 
-<h1>🏎️ Mini Kart Racer Battle</h1>
-<p>P1: Arrows + "/" | P2: WASD + F</p>
-
-<canvas id="game" width="500" height="600"></canvas>
+<canvas id="game" width="900" height="500"></canvas>
 
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 let keys = {};
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
+document.addEventListener("keydown", e => keys[e.key]=true);
+document.addEventListener("keyup", e => keys[e.key]=false);
 
-// Players
-let p1 = { x:150, y:500, speed:0, color:"red", shells:[] };
-let p2 = { x:300, y:500, speed:0, color:"blue", shells:[] };
+// Player
+let player = { x:0, speed:0, maxSpeed:220, lap:1 };
 
-let roadCurve = 0;
+// AI racers
+let ai = [
+  { x:0.2, z:1000, speed:180 },
+  { x:-0.3, z:2000, speed:170 }
+];
 
-// Draw kart (simple sprite style)
-function drawKart(p) {
-  ctx.fillStyle = p.color;
-  ctx.fillRect(p.x, p.y, 40, 60);
+// Shells
+let shells = [];
 
-  // wheels
-  ctx.fillStyle = "black";
-  ctx.fillRect(p.x-5, p.y+10, 10, 20);
-  ctx.fillRect(p.x+35, p.y+10, 10, 20);
+// Road
+let segments = [];
+let segmentLength = 200;
+let roadWidth = 2000;
+let cameraDepth = 0.84;
+let position = 0;
+let drawDistance = 300;
+
+// Build track
+for (let i=0;i<1200;i++){
+  segments.push({
+    curve: Math.sin(i/40)*2,
+    y: Math.sin(i/60)*120
+  });
+}
+
+// Obstacles
+let obstacles = [];
+for (let i=100;i<1200;i+=50){
+  obstacles.push({ z:i*segmentLength, offset:Math.random()*2-1 });
+}
+
+// Rain particles
+let rain = [];
+for(let i=0;i<200;i++){
+  rain.push({ x:Math.random()*900, y:Math.random()*500 });
+}
+
+// Projection
+function project(x,y,z){
+  let scale = cameraDepth / z;
+  return {
+    x:(1+scale*x)*canvas.width/2,
+    y:(1-scale*y)*canvas.height/2,
+    w:scale*roadWidth*canvas.width/2
+  };
 }
 
 // Shoot shell
-function shoot(player) {
-  player.shells.push({
-    x: player.x + 15,
-    y: player.y,
-    speed: 7
-  });
-}
+document.addEventListener("keydown", e=>{
+  if(e.key===" "){
+    shells.push({ x:player.x, z:position+500, target:0 });
+  }
+});
 
-// Collision
-function hit(a,b) {
-  return (
-    a.x < b.x + 40 &&
-    a.x + 40 > b.x &&
-    a.y < b.y + 60 &&
-    a.y + 60 > b.y
-  );
-}
+// Update
+function update(){
 
-function update() {
-  ctx.clearRect(0,0,500,600);
+  // Speed
+  if(keys["ArrowUp"]) player.speed+=2;
+  else player.speed*=0.98;
 
-  // road curve effect
-  roadCurve = Math.sin(Date.now()/500) * 50;
+  if(keys["ArrowDown"]) player.speed-=2;
 
-  ctx.fillStyle = "#666";
-  ctx.fillRect(50 + roadCurve, 0, 400, 600);
+  player.speed=Math.max(0,Math.min(player.speed,player.maxSpeed));
 
-  // dashed lines
-  ctx.fillStyle = "white";
-  for (let i=0;i<600;i+=40){
-    ctx.fillRect(240 + roadCurve, (i + Date.now()/10)%600, 10, 20);
+  // Turning
+  if(keys["ArrowLeft"]) player.x-=0.03*player.speed;
+  if(keys["ArrowRight"]) player.x+=0.03*player.speed;
+
+  position+=player.speed;
+
+  let base = Math.floor(position/segmentLength);
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  let x=0, dx=0;
+  let maxY=canvas.height;
+
+  // Draw road
+  for(let n=0;n<drawDistance;n++){
+    let seg=segments[(base+n)%segments.length];
+    let z=n*segmentLength-(position%segmentLength);
+
+    let p1=project(x,seg.y,z);
+    let p2=project(x+dx,seg.y,z+segmentLength);
+
+    x+=dx;
+    dx+=seg.curve;
+
+    if(p2.y>=maxY) continue;
+    maxY=p2.y;
+
+    ctx.fillStyle=n%2?"#555":"#666";
+    ctx.beginPath();
+    ctx.moveTo(p1.x-p1.w,p1.y);
+    ctx.lineTo(p1.x+p1.w,p1.y);
+    ctx.lineTo(p2.x+p2.w,p2.y);
+    ctx.lineTo(p2.x-p2.w,p2.y);
+    ctx.fill();
   }
 
-  // Player 1 controls
-  if (keys["ArrowUp"]) p1.speed += 0.2;
-  else p1.speed *= 0.95;
+  // AI
+  ai.forEach(a=>{
+    a.z+=a.speed;
+    let dz=a.z-position;
+    if(dz<0) a.z+=segments.length*segmentLength;
 
-  if (keys["ArrowLeft"]) p1.x -= 5;
-  if (keys["ArrowRight"]) p1.x += 5;
+    let scale=cameraDepth/dz;
+    let ax=(1+scale*a.x)*canvas.width/2;
 
-  if (keys["/"]) {
-    shoot(p1);
-    keys["/"] = false;
-  }
+    ctx.fillStyle="orange";
+    ctx.fillRect(ax-15, 400-scale*200, 30, 50);
 
-  // Player 2 controls
-  if (keys["w"]) p2.speed += 0.2;
-  else p2.speed *= 0.95;
-
-  if (keys["a"]) p2.x -= 5;
-  if (keys["d"]) p2.x += 5;
-
-  if (keys["f"]) {
-    shoot(p2);
-    keys["f"] = false;
-  }
-
-  // Move players
-  p1.y -= p1.speed;
-  p2.y -= p2.speed;
-
-  // Draw players
-  drawKart(p1);
-  drawKart(p2);
-
-  // Shells
-  ctx.fillStyle = "yellow";
-
-  p1.shells.forEach((s,i)=>{
-    s.y -= s.speed;
-    ctx.fillRect(s.x, s.y, 10, 20);
-
-    if (hit(s,p2)) {
-      alert("💥 Player 1 hits Player 2!");
-      location.reload();
+    // collision
+    let px=canvas.width/2+player.x*300;
+    if(Math.abs(px-ax)<30 && dz<200){
+      player.speed*=0.7;
     }
   });
 
-  p2.shells.forEach((s,i)=>{
-    s.y -= s.speed;
-    ctx.fillRect(s.x, s.y, 10, 20);
+  // Shells (homing)
+  shells.forEach((s,i)=>{
+    let target=ai[0]; // target first AI
 
-    if (hit(s,p1)) {
-      alert("💥 Player 2 hits Player 1!");
-      location.reload();
+    s.x += (target.x - s.x)*0.05;
+    s.z += 300;
+
+    let dz=s.z-position;
+    let scale=cameraDepth/dz;
+    let sx=(1+scale*s.x)*canvas.width/2;
+
+    ctx.fillStyle="lime";
+    ctx.fillRect(sx-5, 400-scale*200, 10, 20);
+
+    if(dz<200){
+      ctx.fillStyle="red";
+      ctx.fillText("💥", sx, 300);
+      ai.splice(0,1);
+      shells.splice(i,1);
     }
   });
+
+  // Obstacles
+  obstacles.forEach(o=>{
+    let dz=o.z-position;
+    let scale=cameraDepth/dz;
+    let ox=(1+scale*o.offset)*canvas.width/2;
+
+    ctx.fillStyle="red";
+    ctx.fillRect(ox-10, 400-scale*200, 20, 20);
+
+    let px=canvas.width/2+player.x*300;
+    if(Math.abs(px-ox)<20 && dz<200){
+      player.speed*=0.5;
+    }
+  });
+
+  // Player
+  let px=canvas.width/2+player.x*300;
+  ctx.fillStyle="yellow";
+  ctx.fillRect(px-20,420,40,60);
+
+  // Rain
+  ctx.strokeStyle="lightblue";
+  rain.forEach(r=>{
+    r.y+=10;
+    if(r.y>500) r.y=0;
+    ctx.beginPath();
+    ctx.moveTo(r.x,r.y);
+    ctx.lineTo(r.x+2,r.y+10);
+    ctx.stroke();
+  });
+
+  // Fog overlay
+  ctx.fillStyle="rgba(200,200,200,0.05)";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Lap system
+  if(position > segments.length*segmentLength){
+    position=0;
+    player.lap++;
+    if(player.lap>3){
+      alert("🏆 YOU WIN!");
+      location.reload();
+    }
+  }
+
+  ctx.fillStyle="white";
+  ctx.fillText("Lap: "+player.lap+"/3",20,30);
+  ctx.fillText("Speed: "+Math.round(player.speed),20,50);
 
   requestAnimationFrame(update);
 }

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mini Kart Racer Battles</title>
+  <style>
+    body {
+      margin: 0;
+      background: #1a1a1a;
+      color: white;
+      text-align: center;
+      font-family: Arial;
+    }
+    canvas {
+      display: block;
+      margin: auto;
+      background: #444;
+      border: 3px solid white;
+    }
+  </style>
+</head>
+<body>
+
+<h1>🏎️ Mini Kart Racer Battle</h1>
+<p>P1: Arrows + "/" | P2: WASD + F</p>
+
+<canvas id="game" width="500" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let keys = {};
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+// Players
+let p1 = { x:150, y:500, speed:0, color:"red", shells:[] };
+let p2 = { x:300, y:500, speed:0, color:"blue", shells:[] };
+
+let roadCurve = 0;
+
+// Draw kart (simple sprite style)
+function drawKart(p) {
+  ctx.fillStyle = p.color;
+  ctx.fillRect(p.x, p.y, 40, 60);
+
+  // wheels
+  ctx.fillStyle = "black";
+  ctx.fillRect(p.x-5, p.y+10, 10, 20);
+  ctx.fillRect(p.x+35, p.y+10, 10, 20);
+}
+
+// Shoot shell
+function shoot(player) {
+  player.shells.push({
+    x: player.x + 15,
+    y: player.y,
+    speed: 7
+  });
+}
+
+// Collision
+function hit(a,b) {
+  return (
+    a.x < b.x + 40 &&
+    a.x + 40 > b.x &&
+    a.y < b.y + 60 &&
+    a.y + 60 > b.y
+  );
+}
+
+function update() {
+  ctx.clearRect(0,0,500,600);
+
+  // road curve effect
+  roadCurve = Math.sin(Date.now()/500) * 50;
+
+  ctx.fillStyle = "#666";
+  ctx.fillRect(50 + roadCurve, 0, 400, 600);
+
+  // dashed lines
+  ctx.fillStyle = "white";
+  for (let i=0;i<600;i+=40){
+    ctx.fillRect(240 + roadCurve, (i + Date.now()/10)%600, 10, 20);
+  }
+
+  // Player 1 controls
+  if (keys["ArrowUp"]) p1.speed += 0.2;
+  else p1.speed *= 0.95;
+
+  if (keys["ArrowLeft"]) p1.x -= 5;
+  if (keys["ArrowRight"]) p1.x += 5;
+
+  if (keys["/"]) {
+    shoot(p1);
+    keys["/"] = false;
+  }
+
+  // Player 2 controls
+  if (keys["w"]) p2.speed += 0.2;
+  else p2.speed *= 0.95;
+
+  if (keys["a"]) p2.x -= 5;
+  if (keys["d"]) p2.x += 5;
+
+  if (keys["f"]) {
+    shoot(p2);
+    keys["f"] = false;
+  }
+
+  // Move players
+  p1.y -= p1.speed;
+  p2.y -= p2.speed;
+
+  // Draw players
+  drawKart(p1);
+  drawKart(p2);
+
+  // Shells
+  ctx.fillStyle = "yellow";
+
+  p1.shells.forEach((s,i)=>{
+    s.y -= s.speed;
+    ctx.fillRect(s.x, s.y, 10, 20);
+
+    if (hit(s,p2)) {
+      alert("💥 Player 1 hits Player 2!");
+      location.reload();
+    }
+  });
+
+  p2.shells.forEach((s,i)=>{
+    s.y -= s.speed;
+    ctx.fillRect(s.x, s.y, 10, 20);
+
+    if (hit(s,p1)) {
+      alert("💥 Player 2 hits Player 1!");
+      location.reload();
+    }
+  });
+
+  requestAnimationFrame(update);
+}
+
+update();
+</script>
+
+</body>
+</html>
